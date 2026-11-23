@@ -2,8 +2,6 @@
 Salus/
 └── tbprofiler_Salus_Batch1/
     │
-    ├── Salus WGS Batch1 Report.pdf
-    ├── Salus WGS Batch1 Report.pptx
     │
     ├── Salus_Batch1_summary.txt
     ├── Salus_Batch1_summary.variants.txt
@@ -12,10 +10,10 @@ Salus/
     ├── Salus_Batch1_summary.dr.itol.txt
     ├── Salus_Batch1_summary.lineage.itol.txt
     │
-    ├── mapping_stats.tsv
     ├── run_Salus_Batch1.log
     │
     ├── bam/
+    │   ├── mapping_stats.tsv
     │   ├── S1.bam
     │   ├── S1.bam.bai
     │   ├── S2.bam
