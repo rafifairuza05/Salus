@@ -1,0 +1,72 @@
+#!/bin/bash
+# ==========================================================
+# Menjalankan TB-Profiler untuk 1 batch sampel WGS M. tuberculosis
+# Output per sampel: JSON (default) + TXT (--txt) + CSV (--csv)
+# Diakhiri dengan tb-profiler collate untuk tabel ringkasan gabungan
+# ==========================================================
+set -euo pipefail
+
+# ---- Aktifkan conda env TB-Profiler bila perlu (sesuaikan nama env) ----
+# source ~/miniconda3/etc/profile.d/conda.sh
+# conda activate tbprofiler_env
+
+# ---- KONFIGURASI (sesuaikan bila perlu) ----
+BATCH_DIR="/mnt/d/Salus/Salus_Batch1/"
+BATCH_NAME="Salus_Batch1"
+OUT_DIR="${BATCH_DIR}/../tbprofiler_${BATCH_NAME}"
+THREADS=8
+LOG_FILE="${OUT_DIR}/run_${BATCH_NAME}.log"
+
+mkdir -p "$OUT_DIR"
+cd "$OUT_DIR"
+
+DB_NAME="who_v2+"
+if ! tb-profiler list_db 2>/dev/null | grep -qF "$DB_NAME"; then
+    echo "[ERROR] Database ${DB_NAME} belum terpasang. Jalankan: tb-profiler update_tbdb" | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+echo "=== Mulai TB-Profiler untuk ${BATCH_NAME} : $(date) ===" | tee -a "$LOG_FILE"
+
+for R1 in "${BATCH_DIR}"/*_1.fastq.gz; do
+    R2="${R1/_1.fastq.gz/_2.fastq.gz}"
+
+    if [[ ! -f "$R2" ]]; then
+        echo "[WARNING] Pasangan R2 tidak ditemukan untuk: $(basename "$R1") — dilewati." | tee -a "$LOG_FILE"
+        continue
+    fi
+
+    # Ambil ID sampel ringkas, mis. TP04859 dari TP04859_S5_L001_R1_001.fastq.gz
+    SAMPLE=$(basename "$R1" | sed -E 's/.*_(S[0-9]+)_1\.fastq\.gz/\1/')
+
+    echo ">>> Memproses ${SAMPLE} ($(date '+%H:%M:%S'))" | tee -a "$LOG_FILE"
+
+    tb-profiler profile \
+        -1 "$R1" -2 "$R2" \
+        -p "$SAMPLE" -t "$THREADS" \
+        --txt --csv \
+        --call_whole_genome \
+        --spoligotype \
+        >> "$LOG_FILE" 2>&1 || true
+
+    if [[ -s "results/${SAMPLE}.results.json" ]]; then
+        echo "    -> selesai: ${SAMPLE}" | tee -a "$LOG_FILE"
+    else
+        echo "    -> GAGAL: ${SAMPLE} (tidak ada results.json, lihat $LOG_FILE)" | tee -a "$LOG_FILE"
+    fi
+done
+
+echo "=== Menggabungkan hasil (tb-profiler collate) ===" | tee -a "$LOG_FILE"
+tb-profiler collate --prefix "${BATCH_NAME}_summary" | tee -a "$LOG_FILE"
+tb-profiler collate --prefix "${BATCH_NAME}_summary" --itol | tee -a "$LOG_FILE"
+ 
+echo "=== Selesai: $(date) ===" | tee -a "$LOG_FILE"
+echo "Hasil per-sampel (json/txt/csv)     : ${OUT_DIR}/results/"
+echo "Ringkasan gabungan                  : ${OUT_DIR}/${BATCH_NAME}_summary.*"
+echo "File anotasi iTOL (lineage & DR)    : ${OUT_DIR}/${BATCH_NAME}_summary.itol.*"
+echo ""
+echo "Catatan: TB-Profiler collate TIDAK membuat pohon filogenetik itu sendiri."
+echo "File .itol.* di atas hanya file ANOTASI. Untuk pohonnya (format newick, .treefile/.nwk),"
+echo "bangun dari alignment core-genome (misal clean.full.aln hasil snippy-core) memakai IQ-TREE"
+echo "atau software filogenetik lain, lalu upload pohon itu ke web iTOL dan drag-drop file"
+echo "${BATCH_NAME}_summary.itol.* di atasnya untuk anotasi."
